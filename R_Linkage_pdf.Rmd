@@ -1,17 +1,21 @@
 ---
 output:
-    pdf_document:  
+    pdf_document:
       latex_engine: xelatex 
       toc: yes    
 title: |   
-  | \vspace{0.5cm} \LARGE Record Linkage using R 
+  | \vspace{0.5cm} \LARGE Record Linkage Using R 
 author: "Jared Parrish, PhD"
 date: "`r Sys.Date()`" 
 header-includes:
   - \usepackage{amssymb}  
   - \usepackage{titling}
+  - \usepackage{float}
+  - \usepackage{placeins}  # Include this package for \FloatBarrier
   - \pretitle{\begin{center}
     \includegraphics[width=2in,height=2in]{image/RSImage-329695.png}\LARGE\\}
+  - \usepackage{caption}
+    \captionsetup[table]{justification=raggedright,singlelinecheck=false}
   - \posttitle{\end{center}}
     \usepackage{graphicx}
     \usepackage{fancyhdr}
@@ -36,14 +40,12 @@ knitr::opts_chunk$set(echo = TRUE)
 # Background  
 Record linkage is the process of identifying and merging records that refer to the same entity across different data sets. This is particularly useful in scenarios where unique identifiers are not available or reliable. In R, two popular packages for performing record linkage are [RecordLinkage](https://cran.r-project.org/web/packages/RecordLinkage/index.html) and [FastLink](https://cran.r-project.org/web/packages/fastLink/index.html).  
 
-For a HTML version of this document please visit [https://rpubs.com/Parrish_EPI/RecordLinkage](https://rpubs.com/Parrish_EPI/RecordLinkage)
-
-The source code used in this document is available at:  [https://github.com/parrish-epi/R-recordLinkage](https://github.com/parrish-epi/R-recordLinkage)  
+A user friendly HTML version of this document can be found [https://rpubs.com/Parrish_EPI/RecordLinkage](here). All source code, and files used in the linkages are available on github at  [https://github.com/parrish-epi/R-recordLinkage](https://github.com/parrish-epi/R-recordLinkage)
 
 ## RecordLinkage package  
 The [RecordLinkage package](https://journal.r-project.org/archive/2010-2/RJournal_2010-2_Sariyar+Borg.pdf) provides tools for probabilistic record linkage and deduplication. It allows users to compare records based on various attributes, calculate similarity scores, and determine matches based on thresholds. Some of the key features included in this package are:  
 
-* **Pairwise Comparison:** Compares all pairs of records from different data sets or within the same dataset.  
+* **Pairwise Comparison:** Compares all pairs of records from different datasets or within the same dataset.  
 * **Similarity Measures:** Utilizes various similarity measures such as Jaro-Winkler, Levenshtein distance, and Soundex for string comparisons.  
 * **Blocking:** Reduces the number of comparisons by grouping records into blocks based on certain criteria, thereby improving efficiency.   
 * **Probabilistic Matching:** Implements the Fellegi-Sunter model for probabilistic record linkage and other methods, which calculates the likelihood of matches based on attribute similarities.  
@@ -52,14 +54,15 @@ The [RecordLinkage package](https://journal.r-project.org/archive/2010-2/RJourna
 ## FastLink package  
 The fastLink package is designed for large-scale record linkage tasks and focuses on scalability and speed. It extends the functionalities of traditional probabilistic linkage methods and provides tools for estimating and visualizing the linkage process. Some of the key features included in this package are:  
 
-* **Scalability:** Efficiently handles large data sets with millions of records by leveraging parallel computing.  
+* **Scalability:** Efficiently handles large datasets with millions of records by leveraging parallel computing.  
 * **Advanced Blocking:** Implements multiple blocking schemes to ensure that the linkage process remains computationally feasible without sacrificing accuracy.  
 * **Unsupervised Learning:** Automatically estimates parameters required for record linkage without the need for training data.  
 * **Visualization Tools:** Provides tools for visualizing the linkage results and understanding the matching process.   
 
 Both RecordLinkage and fastLink packages offer robust solutions for record linkage tasks in R. While RecordLinkage is more flexible and offers a variety of similarity measures and probabilistic matching, fastLink is optimized for performance and scalability, making it suitable for large data sets.
 
-This exercise will focus on and provide an example using the RecordLinkage package as the approach is largely extendable to the fastLink package. For those interested in learning and using the fastLink package, check out these resources:   
+This exercise will focus on and provide an example using the RecordLinkage package as the approach is largely extendable to the fastLink package. For those interested in learning and using the fastLink package, check out these resources:  
+
 * [An introduction to fastLink for probabilistic record linkage](https://www.naaccr.org/wp-content/uploads/2018/07/An-Introduction-to-Faslink-for-Probabilistic-Record-Linkage-Alexandersson.pdf)  
 * [R package fastLink: Fast Probabilistic Record Linkage](https://github.com/kosukeimai/fastLink)  
 
@@ -67,15 +70,15 @@ The example below demonstrates one approach to using the RecordLinkage package t
 
 # Linkage set-up
 
-Prior to any linkage project, it is important to learn about each data set, elements contained within them, and have context for population distributions in the records being linked.  It is also critical that you have your linkage purpose and expectation well defined.   
+Prior to any linkage project, it is important to learn about each dataset as well as the elements contained within them, and have context for population distributions in the records being linked.  It is also critical that you have your linkage purpose and expectation well-defined.   
 
-The code and output below assume at a least a basic understanding of R, for example how to install and load packages.  The data sets used for this exercise were generated using two different generative models (ChatGPT and Google Gemini) and do not reflect actual individuals. 
+The code and output below assume at a least a basic understanding of R; for example, how to install and load packages.  The data sets used for this exercise were generated using two different generative models (ChatGPT and Google Gemini) and do not reflect actual individuals. 
 
-For this example, the data sets were created to represent the real-life scenario where a health agency draws a sample from a birth record (dat2) and then links those sampled birth records to a population source (dat2) (e.g., hospital discharge records) where the individual may have multiple visits. The expectation is that we will link and retain all individuals from the sample and only the matching population records. This is important to establish up front because during the linkage process, we will identify the matching records and need to be sure to retain all non-matches from the sample (their values will be NULL/NA for all elements in the population source).  
+For this example, the datasets were created to represent the real-life scenario where a health agency draws a sample from a birth record (dat2) and then links those sampled birth records to a population source (dat2) (e.g., hospital discharge records) where the individual may have multiple visits. The expectation is that we will link and retain all individuals from the sample and only the matching population records. This is important to establish up front because during the linkage process, we will identify the matching records and need to be sure to retain all non-matches from the sample (their values will be NULL/NA for all elements in the population source).  
 
 We first need to load a few packages and data for this exercise. If you don't have these packages, you'll need to install the libraries. This exercise was completed using R version 4.4.0.
 
-**Load Packages**
+**Load packages**
 ```{R, echo=TRUE, message=FALSE, warning=FALSE}
 library(RecordLinkage)
 library(stringdist) # for example with cooperators. 
@@ -95,7 +98,8 @@ library(skimr)        # for summarizing data frames
 # Shut off scientific notation, this is critical for long numeric ID's
 options(scipen=999) 
 ```  
-
+  
+  
 **Install data** 
 ```{R, echo=TRUE, message=FALSE, warning=FALSE}
 # Read in data sets to be linked for this example 
@@ -115,13 +119,13 @@ dat2$ID_source <- paste0("dat2_",dat2$ID_source)
 rm('git1','git2') 
 ```
 
-## Review data sets
-After the data have been loaded, the first step is to inspect and review the data. During this process, we want to make sure that the data elements to be used for linkages (partial identifiers) are all formatted the same and all column names are identical. For these examples we have two data sets: dat1 and dat2.  
+## Review datasets
+After the data have been loaded, the first step is to inspect and review the data. During this process, we want to make sure that the data elements to be used for linkages (partial identifiers) are all formatted the same and all column names are identical. For these examples we have two datasets: dat1 and dat2.  
 
 dat1 has `r nrow(dat1)` records and `r ncol(dat1)` variables.  
 dat2 has `r nrow(dat2)` records and `r ncol(dat2)` variables.  
 
-Let's first start by checking what names are in each of the data sets.  
+Let's first start by checking what names are in each of the datasets.  
 
 ```{r, echo=TRUE, message=FALSE, warning=FALSE}
 # View contents of data set 1
@@ -140,7 +144,7 @@ str(dat2)
 ```
 
 **Align feature order**  
-For the RecordLinkage package we need to align the elements. In this exercise we will align dat1 variable order to dat2.  
+For the RecordLinkage package, we need to align the elements. In this exercise, we will align dat1 variable order to dat2.  
 
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
 # Making the order of the variables in the data set the same.
@@ -158,8 +162,8 @@ table(duplicated(dat2$ID_source))
 ```
 
 
-## Align data sets  
-Next, we are going to align dat1 variable names and structure to that of dat2. Remember that the variable names, order, and structure must be the same in both data sets for the RecordLinkage package.
+## Align datasets  
+Next, we are going to align dat1 variable names and structure to that of dat2. Remember that the variable names, order, and structure must be the same in both datasets for the RecordLinkage package.
 
 **Modify dat1**
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
@@ -194,7 +198,7 @@ dat1a <- dat1 %>%
  select(-InSample)
 ```
 
-**De-duplicate Records**  
+**De-duplicate records**  
 It is easiest to link de-duplicated records. This reduces redundancy and improves the estimated probability scores. It is important in a duplicated data set that represents unique events (e.g., hospital visits) to have an individual unique ID representing the patient, and a unique record level ID representing the visit (event).  
 
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
@@ -231,39 +235,50 @@ dplyr::glimpse(dat1a.dedup)
 dplyr::glimpse(dat2a)
 ```
 
-Data preparation is critical for linkages. Before we move forward with the actual linkages let's first inspect the first five records of each data set.
+Data preparation is critical for linkages. Before we move forward with the actual linkages, let's first inspect the first five records of each dataset. Table 1 below displays the first five records from dataset 1, and Table 2 displays the first five records from dataset 2.   
+
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-# data set 1
+
+# dataset 1
 knitr::kable(dat1a.dedup %>% 
              arrange(FamilyName) %>%
-             head(5), format = "latex", booktabs = TRUE) %>%
-       kableExtra::kable_styling(latex_options = c("scale_down"))
+             head(5), format = "latex", booktabs = TRUE,
+             caption = "First five records of aligned dataset 1 (dat1)") %>%
+       kableExtra::kable_styling(latex_options = c("scale_down", "HOLD_position"))
+```
 
-# data set 2
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+# dataset 2
 knitr::kable(dat2a %>% 
              arrange(FamilyName) %>%
-             head(5), format = "latex", booktabs = TRUE) %>%
-       kableExtra::kable_styling(latex_options = c("scale_down"))
+             head(5), format = "latex", booktabs = TRUE,
+             caption = "First five records of aligned dataset 2 (dat2)") %>%
+       kableExtra::kable_styling(latex_options = c("scale_down", "HOLD_position"))
 ```
 
-Finally, the skimr() package provides a really nice tool for reviewing the data elements in the data frame.   
+Finally, the skim function in the skimr() package provides a really nice tool for reviewing the data elements in the data frame.     
 
-**Dat1 - normalized and de-duplicated**
-```{r, echo=TRUE, warning=FALSE, message=FALSE}
-skimr::skim(dat1a.dedup)
+**Skim function output for Dat1 - normalized and de-duplicated**
+ 
+```{r, echo=FALSE, warning=FALSE, message=FALSE, results='asis'}
+ skim_summary <- capture.output(print(skimr::skim_without_charts(dat1a.dedup)))
+cat("```", paste(skim_summary, collapse = "\n"), "```", sep = "\n")
 ```
 
-**Dat2 - normalized**
+**Skim function output for Dat2 - normalized**
 
-```{r, echo=TRUE, warning=FALSE, message=FALSE}
-skimr::skim(dat2a)
+```{r, echo=FALSE, warning=FALSE, message=FALSE, results='asis'}
+skim_summary2 <- capture.output(print(skimr::skim_without_charts(dat2a)))
+cat("```", paste(skim_summary2, collapse = "\n"), "```", sep = "\n")
 ```
 
 # Data linkage  
-Now that the two data sets to be combined are cleaned in the same way (normalized) and have the same naming and ordering of variables (standardized) we are ready to begin our linkages. The figure below provides a basic linkage flow diagram outlining the major points of a linkage project. 
+Now that the two data sets to be combined are cleaned in the same way (normalized) and have the same naming and ordering of variables (standardized) we are ready to begin our linkages. The following figure provides a basic linkage flow diagram outlining the major points of a linkage project. 
 
-```{r echo=FALSE, fig.alt="General data linkage flow diagram.", out.width = '100%'}
+```{r echo=FALSE, fig.cap="General Data Linkage Flow Diagram", fig.alt="General data linkage flow diagram.", out.width = '100%'}
 knitr::include_graphics(
   "C:/Users/parri/Documents/R_Code/RecordLinkage/R_Linkage/image/LinkFlow.png"
   )
@@ -271,9 +286,9 @@ knitr::include_graphics(
 
 ## Identifier assessment  
 
-It is helpful to start by reviewing how many duplicate records have the same combination of identifiers. This will help establish how "unique" the combination of identifiers are and what identifiers are needed to support accurate results.  
+It is helpful to start by reviewing how many duplicate records have the same combination of identifiers. This will help establish how "unique" the combination of identifiers is and what identifiers are needed to support accurate results.  
 
-For this exercise we will use the GivenName, MiddleName, FamilyName, Sex, and DOB for our linkages, so we'll look at that first. We'll then look at the combination uniqueness without DOB and then with just year of birth and then day of birth. This exercise is just to demonstrate the investigations that can be done to get an idea of the types of linkages you can expect with the combination of identifiers to be used. 
+For this exercise, we will use the GivenName, MiddleName, FamilyName, Sex, and DOB for our linkages. We'll then look at the combination uniqueness without DOB and then with just year of birth and then day of birth. This exercise is just to demonstrate the investigations that one can do to get an idea of the types of linkages to expect with the combination of identifiers to be used. 
 
 **Reivew of dat 1 identifiers**
 
@@ -306,7 +321,7 @@ dat1a.dedup %>% group_by(GivenName,FamilyName,Sex, DOB_DY) %>%
                 summarise(Dist = n())
 
 ```
-From this quick assessment we see that for the combination of identifiers to be used we have zero (0) duplicates which is great. However, we may need to "relax" the matching criteria by limiting the number of variables used. We can see that dropping date of birth (DOB) will induce some ubiquity for potentially matching records, however use of day may be a feasible approach if we're trying to increase the sensitivity of detection.
+From this quick assessment, we see that for the combination of identifiers to be used we have zero (0) duplicates which is great. However, we may need to "relax" the matching criteria by limiting the number of variables used. We can see that dropping date of birth (DOB) will induce some ubiquity for potentially matching records; however, use of day may be a feasible approach if we're trying to increase the sensitivity of detection.
 
 **Review of dat2 identifiers**
 
@@ -339,7 +354,7 @@ dat2a %>% group_by(GivenName,FamilyName,Sex, DOB_DY) %>%
                 summarise(Dist = n())
 
 ```
-Like we saw for dat1, for the partial identifiers to be used we have zero (0) duplicates and similar results when dropping date of birth and looking at individual components of the date.
+Like we saw for dat1, to use the partial identifiers we have zero (0) duplicates and similar results when dropping date of birth and looking at individual components of the date.
 
 
 ## Deterministic matching  
@@ -362,12 +377,12 @@ MergedDat <- dat1a.dedup %>%
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
 knitr::kable(MergedDat %>% 
              arrange(FamilyName) %>%
-             head(5), format = "latex", booktabs = TRUE) %>%
+             head(5), format = "latex", booktabs = TRUE,
+             caption = "First five records of merged datasets") %>%
        kableExtra::kable_styling(latex_options = c("scale_down"))
           
 ```
-Because we did a right join, we should retain the same number of records as we had in dat2. Let's not assume anything and check. Afterwar, we'll explore how many individuals in our dat2 did not merge with a record in dat1. From this we'll create our "linkage rate".
-
+Because we did a right join, we should retain the same number of records as we had in dat2. Let's not assume anything and check. Afterward, we'll explore how many individuals in our dat2 did not merge with a record in dat1. From this we'll calculate the linkage rate.
 
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
 nrow(MergedDat) == nrow(dat2a)
@@ -389,14 +404,14 @@ as.data.frame(SumLink)
 
 ```
 
-Using an exact match linkage (merge) the linkage "rate" was `r paste0(as.character(round(SumLink[1,3]*100,1)),"%")` 
+Using an exact match linkage (merge), the linkage "rate" was `r paste0(as.character(round(SumLink[1,3]*100,1)),"%")` 
 
 ## Probabilistic matching  
 Now that we've normalized, standardized, and conducted a baseline merge, we are ready to conduct a probabilistic linkage. We are only going to go through a single approach to showcase how some of the tools work.  
 
-The RecordLinkage package has a lot of nice features but does have some limitations. The most notable is it can be slow and require lots for memory for large data sets. The authors provide two approaches "RLBigDataLinkage" and "compare.linkage". With most public health data sets the RLBigDataLinkage() will need to be used. Because of this, although the example could use the compare.linkage we will use the former for the example.  
+The RecordLinkage package has a lot of nice features but does have some limitations. The most notable is it can be slow and require a lot of memory for large data sets. The authors provide two approaches "RLBigDataLinkage" and "compare.linkage." With most public health data sets the RLBigDataLinkage() will need to be used. Because of this, although the example could use the compare.linkage, we will use the former for the example.  
 
-Another limitation is the string comparisons that are available are limited to Jaro-Winkler, Levenshtein, and Soundex. Only a single comparator can be applied (i.e, no option to apply different comparators to different variables). 
+Another limitation is the available string comparisons are limited to Jaro-Winkler, Levenshtein, and Soundex. Only a single comparator can be applied (i.e, no option to apply different comparators to different variables). 
 
 We will use the [Jaro-Winkler](https://files.eric.ed.gov/fulltext/ED325505.pdf) comparator without any blocking variables. 
 
@@ -422,7 +437,7 @@ rpairs <- RecordLinkage:: RLBigDataLinkage(dataset1 = dat2a,
 #                               )
 ```
 
-Once the comparisons have been made using the criteria specified, we will next apply the algorithm for calculating the probability of a match. Probably the most used is the Fellegi and Sunter stochastic framework.  The RecordLinkage package however, also provides the EpiLink and EM algorighms (see [package documentation](https://cran.r-project.org/web/packages/RecordLinkage/RecordLinkage.pdf) for details).
+Once the comparisons have been made using the criteria specified, we will next apply the algorithm for calculating the probability of a match. Probably the most used is the Fellegi and Sunter stochastic framework.  The RecordLinkage package, however, also provides the EpiLink and EM algorighms (see [package documentation](https://cran.r-project.org/web/packages/RecordLinkage/RecordLinkage.pdf) for details).
 
 The selected cutoff level depends on the algorithm choice, type of comparator, and level of desired sensitivity/specificity.   
 
@@ -436,7 +451,7 @@ print(rpairs)
 #           using the EM algorithm (pair with emClassify)
 ```
 
-The respective weight functions calculate the probability of a match for each record in data set 1 with each record in data set 2 based on the comparator patterns specified. We need to classify the weights as links, potential links, or non-links. To make these classifications we need to establish our acceptance threshold. The threshold, is the probability level that a  above would be accepted as a link or below would be rejected. The threshold my also be a region where above would be accepted as a link, within would be potential, and below would be rejected. The area of uncertainty (potential matches) requires some sort of reconciliation (record review).   
+The respective weight functions calculate the probability of a match for each record in data set 1 with each record in data set 2 based on the comparator patterns specified. We need to classify the weights as links, potential links, or non-links. To make these classifications, we need to establish our acceptance threshold. The threshold is the probability level that above would be accepted as a link or below would be rejected. The threshold may also be a region where above would be accepted as a link, within would be potential, and below would be rejected. The area of uncertainty (potential matches) requires some sort of reconciliation (record review).   
 
 As indicated above, choosing the thresholds is usually done through record review and classification. One of the tools in the RecordLinkage package is the getParetoThreshold() function, which can also be useful for identifying acceptance thresholds. However, with large data sets it can take a long time to run. It is often best to run it a few times with samples taken from the data or a smaller training data set. 
 
@@ -453,7 +468,7 @@ As indicated above, choosing the thresholds is usually done through record revie
 
 Based on the image from the getParetoThreshold() (see below) the long flat arm suggesting that it will be unlikely to identify correct matches below a weight of around 0.8. Based on the interval selected the suggested automatic acceptance threshold is `r pth`.
 
-```{r echo=FALSE, fig.alt="Image of Mean Residual Life (MRL) on y-axis, and threshold level.", out.width = '100%'}
+```{r echo=FALSE, fig.cap="Mean Residual Life (MRL) plot.",fig.alt="Image of Mean Residual Life (MRL) on y-axis, and threshold level.", out.width = '100%'}
 knitr::include_graphics(
   "C:/Users/parri/Documents/R_Code/RecordLinkage/R_Linkage/image/Rplot_GPT.png"
   )
@@ -476,7 +491,7 @@ RlMtch <- RecordLinkage::getPairs(
 RlMtch$is_match <- with(RlMtch, ifelse(is.na(is_match) & Class=="L",1,""))
 ```
 
-Using the ParetoTHreshold() as an automatic acceptance alone will likely result in poor results. As we can see. The linkages "L" in the table below suggest 389 linkages, when we only have 302 records. This is incorrect and leads to false positive matches. However, it is a great starting point for considering what levels will optimize manual review and minimize the number of reviews needed. 
+Using the ParetoThreshold() as an automatic acceptance alone will likely result in poor results. As we can see. The linkages "L" in the table below suggest 389 linkages, when we only have 302 records. This is incorrect and leads to false positive matches. However, it is a great starting point for considering what levels will optimize manual review and minimize the number of reviews needed. 
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
 table(RlMtch$Class,useNA = "always")
 ```
@@ -496,9 +511,9 @@ RlMtch_1 <- RecordLinkage::getPairs(
 RlMtch_1$is_match <- with(RlMtch_1, ifelse(is.na(is_match) & Class=="L",1,""))
 ```
 
-Lets look at the numbers that linked and possible matches that need review by probability score.  
+Let's look at the numbers linked and possible matches that need review by probability score.  
 
-```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.width=10,fig.height=5}
+```{r, echo=TRUE, warning=FALSE, message=FALSE,fig.width=10,fig.height=5}
 table(RlMtch_1$Class)
 # create bins for the probability scores (weights)
 RlMtch_1$cutpnt <- with(RlMtch_1, cut(round(as.numeric(Weight),2), 
@@ -508,6 +523,11 @@ RlMtch_1$cutpnt <- with(RlMtch_1, cut(round(as.numeric(Weight),2),
 table(RlMtch_1$cutpnt)
 # print the counts by bin by matching status (L = Link, N = nonLink, P = possibleLink)
 table(RlMtch_1$cutpnt,RlMtch_1$Class,useNA = "always")
+```  
+
+Histogram of counts by bin for possible matches.    
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.cap="Histogram of counts by bin for possible matches.", fig.alt="Histogram of counts by bin for possible matches.",fig.width=10,fig.height=5}
 
 # Plot histogram of counts by bin for possible matches
 
@@ -524,12 +544,13 @@ RlMtch_1 %>%
 
 From the histogram and table, it is easy to see how quickly the amount of manual review can balloon to where thousands of records need reconciled. For this example, we will conduct manual reviews to 0.85 and then proceed to lower match probability bins. We'll stop once we've reviewed two lower bins with no successful matches. We will then assume all lower matches are non-matches. 
 
-Depending on the goal of the linkage the purpose of manual review may be different. A manual review may be conducted to establish the automatic acceptance level and quantify the error. It may also be a part of the normal linkage process where specificity of the linkages is critical.  
+Depending on the goal of the linkage, the purpose of manual review may be different. A manual review may be conducted to establish the automatic acceptance level and quantify the error. It may also be a part of the normal linkage process where specificity of the linkages is critical.  
 
-To conduct manual review a couple options are available. You can  use the base r edit() function, export the file as a csv or excel file conduct the review and import back in, or track and update with r code based on the row reference. The editMatch() function in the RecordLinkage package  opens up the r data editor and is typically used for creating minimal training datasets. 
+There are a couple options for conducting manual review. You can  use the base r edit() function, export the file as a csv or excel file conduct the review and import back in, or track and update with r code based on the row reference. The editMatch() function in the RecordLinkage package  opens up the r data editor and is typically used for creating minimal training datasets. 
 
-Depending on your preference the getPairs() function can present the pairs in a single row "getPairs(..., single.row=TRUE)" or multiple rows "getPairs(..., single.row=FALSE)". It is generally visually easier to work with the multiple rows for reviewing but does require more data wrangling once completed. This exercise will present one way of working with the multiple rows for review.  
-If using the edit() in R to directly modify the underlying data it is recommended to save your work as a new object (especially if you will not be finishing the review in a single sitting).  
+Depending on your preference, the getPairs() function can present the pairs in a single row "getPairs(..., single.row=TRUE)" or multiple rows "getPairs(..., single.row=FALSE)." It is generally visually easier to work with the multiple rows for reviewing but does require more data wrangling once completed. This exercise will present one way of working with the multiple rows for review.  
+
+If using the edit() in R to directly modify the underlying data, save your work as a new object (especially if you will not be finishing the review in a single sitting).  
 
 We typically use the is_match field and set 1 = match, 2 = needs additional review, 3 = nonmatch, and leave blank for those not reviewed. With the multi-row view we only update the second record of the presented match set.
 
@@ -543,22 +564,28 @@ Below is a screen shot of the edit() indicating how we update using the basic ed
 # write.csv(RlMtch_1, "ManualReviewMatch.csv", row.names=FALSE)
 ```
 
-```{r echo=FALSE, fig.alt="Image of potential matches from the r base editor.", out.width = '100%'}
+```{r echo=FALSE, fig.cap="Image of potential matches from the r base editor.",fig.alt="Image of potential matches from the r base editor.", out.width = '100%'}
 knitr::include_graphics(
   "C:/Users/parri/Documents/R_Code/RecordLinkage/R_Linkage/image/ML_edit.png"
   )
 ```
 
 As a side note: make sure you develop a set of rules for your manual review that can be replicated. For the manual review in this exercise the following rules for matches were followed:  
-1. Character(s) change in variable(s) that do not result in a known valid spelling of the name(s).
-2. A single change in date of birth year, month, or day (exception for 12/31 and 1/1 transpositions +/- 5 days).
-3. A difference in sex specification with all other variables matching.
-4. Character(s) change in variables(s) that result in a valid name, but a valid middle name is the same.
+
+1. Character(s) change in variable(s) that do not result in a known valid spelling of the name(s).  
+
+2. A single change in date of birth year, month, or day (exception for 12/31 and 1/1 transpositions +/- 5 days).  
+
+3. A difference in sex specification with all other variables matching.  
+
+4. Character(s) change in variables(s) that result in a valid name, but a valid middle name is the same.  
+
 5. All other non-discernible potential matches reviewed by two people and classified.  
+
 
 ### Summarize linkage  
 
-After the manual review we can summarize the review findings.  
+After the manual review, we can summarize the review findings.  
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # load manual reviewed data
@@ -593,12 +620,13 @@ Rev_pairs %>% filter(!is.na(is_match)) %>%
               arrange(desc(as.numeric(row.names(.)))) %>%
               mutate(Clink = cumsum(Link),
                      Ctotal = cumsum(total)) %>%
-              mutate(cPropLink = Clink/Ctotal)
+              mutate(cPropLink = Clink/Ctotal),
+       caption = "Cumulative linkage match % by bin"
 )
 
 ```
 
-From this, we can see we detected fewer matches at the lower match probabilities. If we were going to be developing an automatic acceptance threshold, this would be much more informative than relying only on the ParetoThreshold calculated above. For example, if I decided to set a threshold at >0.95, 95% of the record pairs in this range would be expected to be true matches. 
+From this, we can see we detected fewer matches at the lower match probabilities. If we were going to be developing an automatic acceptance threshold, this would be much more informative than relying only on the ParetoThreshold calculated previously. For example, if I decided to set a threshold at >0.95, 95% of the record pairs in this range would be expected to be true matches. 
 
 To finish this off and calculate our linkage rates for dat2 (our sample), which is the proportion that successfully matched with the dat1 (population source), we need to merge our linked data to the full data.  To do this we need to do a little bit of data wrangling. 
 
@@ -642,14 +670,14 @@ if (nrow(MP_1) == nrow(MP_2)) {
 
 ```
 
-Now that we have the data in a nice format, before we merge back to our original sample (dat2), we need to check if we created any duplicates. This can be done at different times in the linkage process, but for simplicity we're just doing it once here.
+Now that we have the data in a nice format, before we merge back to our original sample (dat2), we need to check if we created any duplicates. This can be done at different times in the linkage process, but for simplicity, we're just doing it once here.
 
 **Check for duplicated records**
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 table(duplicated(MatchedPairsFinal$ID_source1))
 ```
 
-This is great no duplicates. This means we didn't link an individual twice. If we had, a simple strategy would be to retain the match with the highest probability match score.  
+This is great; no duplicates. This means we didn't link an individual twice. If we had, a simple strategy would be to retain the match with the highest probability match score.  
 
 Let's now merge the linked data back to dat2 (our sample) and calculate the linkage rate.  
 
